@@ -1,5 +1,35 @@
 import { useState, useEffect, useRef } from "react";
 
+// ── Supabase ──────────────────────────────────────────────────────────────────
+const SUPABASE_URL = "https://jzpklndjkwnnvsvsgucr.supabase.co";
+const SUPABASE_KEY = "sb_publishable_XTVLsbsuOWDGC9R4LXCJJg_2OHyq7a7";
+
+async function dbLoad() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rotina_dados?id=eq.usuario&select=*`, {
+      headers: { "apikey": SUPABASE_KEY, "Authorization": `Bearer ${SUPABASE_KEY}` }
+    });
+    const data = await res.json();
+    return data?.[0] || null;
+  } catch { return null; }
+}
+
+async function dbSave(payload) {
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/rotina_dados?id=eq.usuario`, {
+      method: "PATCH",
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Authorization": `Bearer ${SUPABASE_KEY}`,
+        "Content-Type": "application/json",
+        "Prefer": "return=minimal"
+      },
+      body: JSON.stringify(payload)
+    });
+  } catch {}
+}
+
+// ── Colors & Constants ────────────────────────────────────────────────────────
 const COLORS = {
   bg: "#0f0f14", surface: "#1a1a24", card: "#21212e",
   accent: "#7c6af7", accentLight: "#a89df9", pop: "#f7c26a",
@@ -26,7 +56,7 @@ const INITIAL_TASKS = [
   { id: 9, text: "Planejar amanhã (5 min)",         category: "noite",    done: false, priority: true,  recurring: true,  xp: 50 },
 ];
 
-// ── API helper ──────────────────────────────────────────────────────────────
+// ── API helper ────────────────────────────────────────────────────────────────
 async function callClaude(mode, context, messages) {
   const res = await fetch("/api/claude", {
     method: "POST",
@@ -38,7 +68,7 @@ async function callClaude(mode, context, messages) {
   return data.text;
 }
 
-// ── Time Input ──────────────────────────────────────────────────────────────
+// ── Time Input ────────────────────────────────────────────────────────────────
 function TimeInput({ value, onChange, min = 1, max = 90 }) {
   const s = (extra) => ({ width: 28, height: 28, borderRadius: 8, background: COLORS.surface, border: `1px solid ${COLORS.border}`, color: COLORS.text, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", ...extra });
   return (
@@ -50,7 +80,7 @@ function TimeInput({ value, onChange, min = 1, max = 90 }) {
   );
 }
 
-// ── Pomodoro ────────────────────────────────────────────────────────────────
+// ── Settings Panel ────────────────────────────────────────────────────────────
 function SettingsPanel({ focusMin, breakMin, onApply }) {
   const [f, setF] = useState(focusMin);
   const [b, setB] = useState(breakMin);
@@ -79,6 +109,7 @@ function SettingsPanel({ focusMin, breakMin, onApply }) {
   );
 }
 
+// ── Pomodoro Timer ────────────────────────────────────────────────────────────
 function PomodoroTimer() {
   const [focusMin, setFocusMin] = useState(25);
   const [breakMin, setBreakMin] = useState(5);
@@ -110,7 +141,7 @@ function PomodoroTimer() {
 
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
   const ss = String(seconds % 60).padStart(2, "0");
-  const pct = ((( isBreak ? breakSec : focusSec) - seconds) / (isBreak ? breakSec : focusSec)) * 100;
+  const pct = (((isBreak ? breakSec : focusSec) - seconds) / (isBreak ? breakSec : focusSec)) * 100;
   const r = 44, circ = 2 * Math.PI * r;
 
   return (
@@ -138,115 +169,79 @@ function PomodoroTimer() {
   );
 }
 
-// ── AI Chat ─────────────────────────────────────────────────────────────────
+// ── AI Chat ───────────────────────────────────────────────────────────────────
 function AIChat({ onClose }) {
-  const [messages, setMessages] = useState([
-    { role: "assistant", content: "Oi! 👋 Sou seu assistente TDAH. Como posso te ajudar hoje?" }
-  ]);
-  const [input, setInput]   = useState("");
+  const [messages, setMessages] = useState([{ role: "assistant", content: "Oi! 👋 Sou seu assistente TDAH. Como posso te ajudar hoje?" }]);
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef(null);
-
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
-
   const send = async () => {
     if (!input.trim() || loading) return;
     const userMsg = { role: "user", content: input.trim() };
     const newMsgs = [...messages, userMsg];
-    setMessages(newMsgs);
-    setInput("");
-    setLoading(true);
+    setMessages(newMsgs); setInput(""); setLoading(true);
     try {
-      const apiMsgs = newMsgs.filter(m => m.role !== "assistant" || newMsgs.indexOf(m) > 0);
-      const text = await callClaude("chat", null, apiMsgs);
+      const text = await callClaude("chat", null, newMsgs);
       setMessages(m => [...m, { role: "assistant", content: text }]);
-    } catch {
-      setMessages(m => [...m, { role: "assistant", content: "Ops, tive um problema. Tente novamente! 😅" }]);
-    } finally { setLoading(false); }
+    } catch { setMessages(m => [...m, { role: "assistant", content: "Ops, tive um problema. Tente novamente! 😅" }]); }
+    finally { setLoading(false); }
   };
-
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center", padding: "0 0 0 0" }}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 200, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
       <div style={{ background: COLORS.surface, borderRadius: "24px 24px 0 0", width: "100%", maxWidth: 480, height: "75vh", display: "flex", flexDirection: "column", border: `1px solid ${COLORS.border}` }}>
-        {/* Header */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "18px 20px", borderBottom: `1px solid ${COLORS.border}` }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 36, height: 36, borderRadius: 12, background: COLORS.accent+"30", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🧠</div>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>Assistente TDAH</div>
-              <div style={{ fontSize: 11, color: COLORS.success }}>● Online</div>
-            </div>
+            <div><div style={{ fontSize: 15, fontWeight: 700, color: COLORS.text }}>Assistente TDAH</div><div style={{ fontSize: 11, color: COLORS.success }}>● Online</div></div>
           </div>
           <button onClick={onClose} style={{ background: "transparent", border: "none", color: COLORS.muted, fontSize: 22, cursor: "pointer" }}>×</button>
         </div>
-        {/* Messages */}
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
           {messages.map((m, i) => (
             <div key={i} style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-              <div style={{ maxWidth: "80%", background: m.role === "user" ? COLORS.accent : COLORS.card, borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "10px 14px", fontSize: 14, color: COLORS.text, lineHeight: 1.5 }}>
-                {m.content}
-              </div>
+              <div style={{ maxWidth: "80%", background: m.role === "user" ? COLORS.accent : COLORS.card, borderRadius: m.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px", padding: "10px 14px", fontSize: 14, color: COLORS.text, lineHeight: 1.5 }}>{m.content}</div>
             </div>
           ))}
-          {loading && (
-            <div style={{ display: "flex", justifyContent: "flex-start" }}>
-              <div style={{ background: COLORS.card, borderRadius: "16px 16px 16px 4px", padding: "10px 16px", color: COLORS.muted, fontSize: 20, letterSpacing: 2 }}>···</div>
-            </div>
-          )}
+          {loading && <div style={{ display: "flex", justifyContent: "flex-start" }}><div style={{ background: COLORS.card, borderRadius: "16px 16px 16px 4px", padding: "10px 16px", color: COLORS.muted, fontSize: 20, letterSpacing: 2 }}>···</div></div>}
           <div ref={bottomRef} />
         </div>
-        {/* Input */}
         <div style={{ padding: "12px 16px", borderTop: `1px solid ${COLORS.border}`, display: "flex", gap: 8 }}>
-          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()}
-            placeholder="Digite sua mensagem..."
+          <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === "Enter" && send()} placeholder="Digite sua mensagem..."
             style={{ flex: 1, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "10px 14px", color: COLORS.text, fontSize: 14, outline: "none" }} />
-          <button onClick={send} disabled={loading || !input.trim()}
-            style={{ background: COLORS.accent, border: "none", borderRadius: 12, width: 44, color: "#fff", cursor: "pointer", fontSize: 18, opacity: loading || !input.trim() ? 0.5 : 1 }}>↑</button>
+          <button onClick={send} disabled={loading || !input.trim()} style={{ background: COLORS.accent, border: "none", borderRadius: 12, width: 44, color: "#fff", cursor: "pointer", fontSize: 18, opacity: loading || !input.trim() ? 0.5 : 1 }}>↑</button>
         </div>
       </div>
     </div>
   );
 }
 
-// ── AI Suggest Tasks ─────────────────────────────────────────────────────────
+// ── AI Suggest ────────────────────────────────────────────────────────────────
 function AISuggest({ mood, onAddTasks, onClose }) {
   const [loading, setLoading] = useState(false);
-  const [tasks,   setTasks]   = useState(null);
-  const [error,   setError]   = useState(null);
-
+  const [tasks, setTasks] = useState(null);
+  const [error, setError] = useState(null);
   const moodLabels = { 1: "muito travado e sem energia", 2: "com dificuldade de começar", 3: "ok, neutro", 4: "bem e animado", 5: "com muita energia e foco" };
   const hour = new Date().getHours();
   const period = hour < 12 ? "manhã" : hour < 18 ? "tarde" : "noite";
-
   const generate = async () => {
     setLoading(true); setError(null);
     try {
       const context = `Humor atual: ${moodLabels[mood]}. Período do dia: ${period}. Sugira 3 tarefas adequadas para este momento.`;
       const text = await callClaude("suggest", context);
-      const clean = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
       setTasks(parsed.tasks.map((t, i) => ({ ...t, id: Date.now() + i, done: false, recurring: false })));
     } catch { setError("Não foi possível gerar sugestões. Verifique sua chave de API."); }
     finally { setLoading(false); }
   };
-
   useEffect(() => { generate(); }, []);
-
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ background: COLORS.surface, borderRadius: 24, padding: 28, width: "100%", maxWidth: 400, border: `1px solid ${COLORS.border}` }}>
         <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.text, marginBottom: 6 }}>✨ Sugestões da IA</div>
         <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 20 }}>Baseado no seu humor e horário do dia</div>
-
-        {loading && (
-          <div style={{ textAlign: "center", padding: "30px 0" }}>
-            <div style={{ fontSize: 32, marginBottom: 12 }}>🤔</div>
-            <div style={{ color: COLORS.muted, fontSize: 14 }}>Pensando nas melhores tarefas para você...</div>
-          </div>
-        )}
-
+        {loading && <div style={{ textAlign: "center", padding: "30px 0" }}><div style={{ fontSize: 32, marginBottom: 12 }}>🤔</div><div style={{ color: COLORS.muted, fontSize: 14 }}>Pensando nas melhores tarefas...</div></div>}
         {error && <div style={{ color: COLORS.danger, fontSize: 13, marginBottom: 16, background: COLORS.danger+"15", padding: 12, borderRadius: 10 }}>{error}</div>}
-
         {tasks && (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
             {tasks.map((t, i) => {
@@ -264,7 +259,6 @@ function AISuggest({ mood, onAddTasks, onClose }) {
             })}
           </div>
         )}
-
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={onClose} style={{ flex: 1, background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, color: COLORS.muted, cursor: "pointer", fontWeight: 600 }}>Cancelar</button>
           {tasks && <button onClick={() => { onAddTasks(tasks); onClose(); }} style={{ flex: 2, background: COLORS.accent, border: "none", borderRadius: 12, padding: 12, color: "#fff", cursor: "pointer", fontWeight: 700 }}>Adicionar todas ✓</button>}
@@ -275,39 +269,32 @@ function AISuggest({ mood, onAddTasks, onClose }) {
   );
 }
 
-// ── AI Routine Generator ─────────────────────────────────────────────────────
+// ── AI Routine ────────────────────────────────────────────────────────────────
 function AIRoutine({ onSetRoutine, onClose }) {
-  const [step,     setStep]    = useState(0);
-  const [profile,  setProfile] = useState({ wakeUp: "7h", work: "sim", meds: "sim", exercise: "às vezes" });
-  const [loading,  setLoading] = useState(false);
-  const [error,    setError]   = useState(null);
-
+  const [profile, setProfile] = useState({ wakeUp: "7h", work: "sim", meds: "sim", exercise: "às vezes" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const generate = async () => {
     setLoading(true); setError(null);
     try {
       const context = `Perfil: acorda às ${profile.wakeUp}, trabalha/estuda: ${profile.work}, toma medicação: ${profile.meds}, faz exercício: ${profile.exercise}. Crie uma rotina diária completa e realista para TDAH.`;
       const text = await callClaude("routine", context);
-      const clean = text.replace(/```json|```/g, "").trim();
-      const parsed = JSON.parse(clean);
-      const tasks = parsed.tasks.map((t, i) => ({ ...t, id: Date.now() + i, done: false }));
-      onSetRoutine(tasks);
+      const parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
+      onSetRoutine(parsed.tasks.map((t, i) => ({ ...t, id: Date.now() + i, done: false })));
       onClose();
     } catch { setError("Não foi possível gerar a rotina. Verifique sua chave de API."); setLoading(false); }
   };
-
   const options = [
-    { key: "wakeUp",   label: "⏰ Você acorda às",     values: ["5h", "6h", "7h", "8h", "9h", "10h+"] },
-    { key: "work",     label: "💼 Trabalha ou estuda",   values: ["sim", "não", "home office"] },
-    { key: "meds",     label: "💊 Toma medicação TDAH",  values: ["sim", "não", "às vezes"] },
-    { key: "exercise", label: "🏃 Pratica exercícios",   values: ["sim", "não", "às vezes"] },
+    { key: "wakeUp", label: "⏰ Você acorda às", values: ["5h", "6h", "7h", "8h", "9h", "10h+"] },
+    { key: "work", label: "💼 Trabalha ou estuda", values: ["sim", "não", "home office"] },
+    { key: "meds", label: "💊 Toma medicação TDAH", values: ["sim", "não", "às vezes"] },
+    { key: "exercise", label: "🏃 Pratica exercícios", values: ["sim", "não", "às vezes"] },
   ];
-
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ background: COLORS.surface, borderRadius: 24, padding: 28, width: "100%", maxWidth: 400, border: `1px solid ${COLORS.border}` }}>
         <div style={{ fontSize: 18, fontWeight: 800, color: COLORS.text, marginBottom: 6 }}>🗓 Gerar minha rotina</div>
-        <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 24 }}>Conte um pouco sobre você para a IA criar sua rotina ideal</div>
-
+        <div style={{ fontSize: 13, color: COLORS.muted, marginBottom: 24 }}>Conte um pouco sobre você</div>
         {!loading && !error && (
           <>
             <div style={{ display: "flex", flexDirection: "column", gap: 18, marginBottom: 24 }}>
@@ -331,26 +318,14 @@ function AIRoutine({ onSetRoutine, onClose }) {
             </div>
           </>
         )}
-
-        {loading && (
-          <div style={{ textAlign: "center", padding: "30px 0" }}>
-            <div style={{ fontSize: 40, marginBottom: 12 }}>🧠</div>
-            <div style={{ color: COLORS.muted, fontSize: 14 }}>Criando sua rotina personalizada...</div>
-          </div>
-        )}
-
-        {error && (
-          <>
-            <div style={{ color: COLORS.danger, fontSize: 13, marginBottom: 16, background: COLORS.danger+"15", padding: 12, borderRadius: 10 }}>{error}</div>
-            <button onClick={onClose} style={{ width: "100%", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, color: COLORS.muted, cursor: "pointer", fontWeight: 600 }}>Fechar</button>
-          </>
-        )}
+        {loading && <div style={{ textAlign: "center", padding: "30px 0" }}><div style={{ fontSize: 40, marginBottom: 12 }}>🧠</div><div style={{ color: COLORS.muted, fontSize: 14 }}>Criando sua rotina personalizada...</div></div>}
+        {error && <><div style={{ color: COLORS.danger, fontSize: 13, marginBottom: 16, background: COLORS.danger+"15", padding: 12, borderRadius: 10 }}>{error}</div><button onClick={onClose} style={{ width: "100%", background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, color: COLORS.muted, cursor: "pointer", fontWeight: 600 }}>Fechar</button></>}
       </div>
     </div>
   );
 }
 
-// ── Mood Tracker ────────────────────────────────────────────────────────────
+// ── Mood Tracker ──────────────────────────────────────────────────────────────
 function MoodTracker({ mood, setMood }) {
   const moods = [{ val: 1, emoji: "😵", label: "Travado" }, { val: 2, emoji: "😟", label: "Difícil" }, { val: 3, emoji: "😐", label: "Ok" }, { val: 4, emoji: "😊", label: "Bem" }, { val: 5, emoji: "🚀", label: "Voando" }];
   return (
@@ -369,7 +344,7 @@ function MoodTracker({ mood, setMood }) {
   );
 }
 
-// ── Task Card ───────────────────────────────────────────────────────────────
+// ── Task Card ─────────────────────────────────────────────────────────────────
 function TaskCard({ task, onToggle, onDelete }) {
   const cat = CATEGORIES[task.category] || CATEGORIES.qualquer;
   return (
@@ -392,9 +367,9 @@ function TaskCard({ task, onToggle, onDelete }) {
   );
 }
 
-// ── Add Task Modal ──────────────────────────────────────────────────────────
+// ── Add Task Modal ────────────────────────────────────────────────────────────
 function AddTaskModal({ onAdd, onClose }) {
-  const [text, setText]         = useState("");
+  const [text, setText] = useState("");
   const [category, setCategory] = useState("qualquer");
   const [priority, setPriority] = useState(false);
   const handleAdd = () => { if (!text.trim()) return; onAdd({ text: text.trim(), category, priority, recurring: false, xp: priority ? 50 : 30 }); onClose(); };
@@ -425,7 +400,7 @@ function AddTaskModal({ onAdd, onClose }) {
   );
 }
 
-// ── XP Bar ──────────────────────────────────────────────────────────────────
+// ── XP Bar ────────────────────────────────────────────────────────────────────
 function XPBar({ xp, level }) {
   const xpForNext = level * 200, xpInLevel = xp % 200;
   return (
@@ -442,7 +417,7 @@ function XPBar({ xp, level }) {
   );
 }
 
-// ── App ──────────────────────────────────────────────────────────────────────
+// ── App ───────────────────────────────────────────────────────────────────────
 export default function App() {
   const [tasks,        setTasks]        = useState(INITIAL_TASKS);
   const [xp,           setXp]           = useState(0);
@@ -454,6 +429,29 @@ export default function App() {
   const [showRoutine,  setShowRoutine]  = useState(false);
   const [activeFilter, setActiveFilter] = useState("all");
   const [toast,        setToast]        = useState(null);
+  const [loaded,       setLoaded]       = useState(false);
+  const saveTimer = useRef(null);
+
+  // ── Carregar dados do Supabase
+  useEffect(() => {
+    dbLoad().then(data => {
+      if (data) {
+        if (data.tasks?.length) setTasks(data.tasks);
+        if (data.xp)            setXp(data.xp);
+        if (data.mood)          setMood(data.mood);
+        if (data.notes)         setNotes(data.notes);
+      }
+      setLoaded(true);
+    });
+  }, []);
+
+  // ── Salvar automaticamente com debounce
+  const save = (newTasks, newXp, newMood, newNotes) => {
+    clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      dbSave({ tasks: newTasks, xp: newXp, mood: newMood, notes: newNotes });
+    }, 1000);
+  };
 
   const level = Math.floor(xp / 200) + 1;
   const done  = tasks.filter(t => t.done).length;
@@ -462,19 +460,26 @@ export default function App() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
 
-  const toggleTask = (id) => setTasks(prev => prev.map(t => {
-    if (t.id !== id) return t;
-    const newDone = !t.done;
-    if (newDone) { setXp(x => x + t.xp); showToast(`+${t.xp} XP! 🎉`); }
-    else { setXp(x => Math.max(0, x - t.xp)); }
-    return { ...t, done: newDone };
-  }));
+  const toggleTask = (id) => setTasks(prev => {
+    const next = prev.map(t => {
+      if (t.id !== id) return t;
+      const newDone = !t.done;
+      const newXp = newDone ? xp + t.xp : Math.max(0, xp - t.xp);
+      if (newDone) { setXp(newXp); showToast(`+${t.xp} XP! 🎉`); save(prev.map(x => x.id===id ? {...x,done:true} : x), newXp, mood, notes); }
+      else { setXp(newXp); save(prev.map(x => x.id===id ? {...x,done:false} : x), newXp, mood, notes); }
+      return { ...t, done: newDone };
+    });
+    return next;
+  });
 
-  const deleteTask  = (id)    => setTasks(prev => prev.filter(t => t.id !== id));
-  const addTask     = (data)  => { setTasks(prev => [...prev, { id: Date.now(), done: false, ...data }]); showToast("Tarefa adicionada! ✨"); };
-  const addTasks    = (list)  => { setTasks(prev => [...prev, ...list]); showToast(`${list.length} tarefas adicionadas! ✨`); };
-  const setRoutine  = (list)  => { setTasks(list); setXp(0); showToast("Nova rotina criada! 🗓"); };
-  const resetDay    = ()      => { setTasks(prev => prev.map(t => t.recurring ? { ...t, done: false } : t)); showToast("Novo dia, nova energia! 🌅"); };
+  const deleteTask = (id) => { const next = tasks.filter(t => t.id !== id); setTasks(next); save(next, xp, mood, notes); };
+  const addTask    = (data) => { const next = [...tasks, { id: Date.now(), done: false, ...data }]; setTasks(next); save(next, xp, mood, notes); showToast("Tarefa adicionada! ✨"); };
+  const addTasks   = (list) => { const next = [...tasks, ...list]; setTasks(next); save(next, xp, mood, notes); showToast(`${list.length} tarefas adicionadas! ✨`); };
+  const setRoutine = (list) => { setTasks(list); setXp(0); save(list, 0, mood, notes); showToast("Nova rotina criada! 🗓"); };
+  const resetDay   = ()     => { const next = tasks.map(t => t.recurring ? { ...t, done: false } : t); setTasks(next); save(next, xp, mood, notes); showToast("Novo dia, nova energia! 🌅"); };
+
+  const handleMood = (val) => { setMood(val); save(tasks, xp, val, notes); };
+  const handleNotes = (val) => { setNotes(val); save(tasks, xp, mood, val); };
 
   const filtered =
     activeFilter === "all"      ? tasks :
@@ -490,6 +495,13 @@ export default function App() {
     { key: "noite",    label: "🌙 Noite"       },
     { key: "done",     label: "✓ Feitas"       },
   ];
+
+  if (!loaded) return (
+    <div style={{ minHeight: "100vh", background: COLORS.bg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
+      <div style={{ fontSize: 48 }}>🧠</div>
+      <div style={{ color: COLORS.muted, fontSize: 15 }}>Carregando sua rotina...</div>
+    </div>
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: COLORS.bg, color: COLORS.text, fontFamily: "'DM Sans', 'Segoe UI', sans-serif", paddingBottom: 100 }}>
@@ -509,7 +521,6 @@ export default function App() {
       )}
 
       <div style={{ maxWidth: 480, margin: "0 auto", padding: "0 16px" }}>
-        {/* Header */}
         <div style={{ padding: "32px 0 20px", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>
             <div style={{ fontSize: 24, fontWeight: 900, color: COLORS.text, letterSpacing: -0.5 }}>Minha Rotina <span style={{ color: COLORS.accent }}>TDAH</span></div>
@@ -518,19 +529,11 @@ export default function App() {
           <button onClick={resetDay} style={{ background: COLORS.card, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: "8px 14px", color: COLORS.muted, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>🌅 Novo dia</button>
         </div>
 
-        {/* AI Actions */}
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <button onClick={() => setShowSuggest(true)}
-            style={{ flex: 1, background: COLORS.accent+"20", border: `1px solid ${COLORS.accent+"40"}`, borderRadius: 14, padding: "12px 8px", color: COLORS.accentLight, cursor: "pointer", fontWeight: 700, fontSize: 13, textAlign: "center" }}>
-            ✨ Sugerir tarefas
-          </button>
-          <button onClick={() => setShowRoutine(true)}
-            style={{ flex: 1, background: COLORS.pop+"15", border: `1px solid ${COLORS.pop+"40"}`, borderRadius: 14, padding: "12px 8px", color: COLORS.pop, cursor: "pointer", fontWeight: 700, fontSize: 13, textAlign: "center" }}>
-            🗓 Gerar rotina
-          </button>
+          <button onClick={() => setShowSuggest(true)} style={{ flex: 1, background: COLORS.accent+"20", border: `1px solid ${COLORS.accent+"40"}`, borderRadius: 14, padding: "12px 8px", color: COLORS.accentLight, cursor: "pointer", fontWeight: 700, fontSize: 13, textAlign: "center" }}>✨ Sugerir tarefas</button>
+          <button onClick={() => setShowRoutine(true)} style={{ flex: 1, background: COLORS.pop+"15", border: `1px solid ${COLORS.pop+"40"}`, borderRadius: 14, padding: "12px 8px", color: COLORS.pop, cursor: "pointer", fontWeight: 700, fontSize: 13, textAlign: "center" }}>🗓 Gerar rotina</button>
         </div>
 
-        {/* Progress */}
         <div style={{ background: COLORS.surface, borderRadius: 20, padding: "18px 20px", border: `1px solid ${COLORS.border}`, marginBottom: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 10 }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: COLORS.text }}>Progresso do dia</span>
@@ -543,12 +546,11 @@ export default function App() {
 
         <XPBar xp={xp} level={level} />
         <div style={{ height: 14 }} />
-        <MoodTracker mood={mood} setMood={setMood} />
+        <MoodTracker mood={mood} setMood={handleMood} />
         <div style={{ height: 14 }} />
         <PomodoroTimer />
         <div style={{ height: 20 }} />
 
-        {/* Tasks */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
           <div style={{ fontSize: 16, fontWeight: 800, color: COLORS.text }}>Tarefas</div>
           <button onClick={() => setShowAdd(true)} style={{ background: COLORS.accent, border: "none", borderRadius: 12, padding: "8px 16px", color: "#fff", cursor: "pointer", fontWeight: 700, fontSize: 13 }}>+ Adicionar</button>
@@ -571,16 +573,13 @@ export default function App() {
         ) : filtered.map(task => <TaskCard key={task.id} task={task} onToggle={toggleTask} onDelete={deleteTask} />)}
 
         <div style={{ height: 20 }} />
-
-        {/* Notes */}
         <div style={{ background: COLORS.card, borderRadius: 20, padding: 20, border: `1px solid ${COLORS.border}` }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: COLORS.muted, letterSpacing: 1, textTransform: "uppercase", marginBottom: 10 }}>📝 Notas rápidas</div>
-          <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Escreva aqui pensamentos, lembretes, ideias..."
+          <textarea value={notes} onChange={e => handleNotes(e.target.value)} placeholder="Escreva aqui pensamentos, lembretes, ideias..."
             style={{ width: "100%", background: COLORS.surface, border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 12, color: COLORS.text, fontSize: 14, resize: "vertical", minHeight: 80, outline: "none", boxSizing: "border-box", fontFamily: "inherit", lineHeight: 1.5 }} />
         </div>
       </div>
 
-      {/* Floating Chat Button */}
       <button onClick={() => setShowChat(true)}
         style={{ position: "fixed", bottom: 28, right: 24, width: 56, height: 56, borderRadius: "50%", background: `linear-gradient(135deg, ${COLORS.accent}, ${COLORS.pop})`, border: "none", cursor: "pointer", fontSize: 24, boxShadow: "0 4px 20px rgba(124,106,247,0.5)", zIndex: 150, display: "flex", alignItems: "center", justifyContent: "center" }}>
         🧠
